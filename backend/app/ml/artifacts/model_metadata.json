@@ -1,0 +1,460 @@
+{
+  "model_version": "1.0.0",
+  "model_type": "LogisticRegression",
+  "trained_at": "2026-07-31T14:11:00.548966+00:00",
+  "churn_definition": "A customer is churned if they made no purchase in the 90 days following the training cutoff (2011-09-10).",
+  "leakage_prevention": "Features are computed exclusively from transactions before the cutoff date; the label is derived exclusively from transactions after it. Recency is therefore a valid predictor rather than a restatement of the target, which is why ROC-AUC is realistic instead of 1.00.",
+  "features": [
+    "recency",
+    "frequency",
+    "monetary",
+    "avg_order_value",
+    "tenure_days",
+    "avg_days_between_orders",
+    "distinct_products",
+    "total_items",
+    "return_rate",
+    "recency_ratio"
+  ],
+  "feature_descriptions": {
+    "recency": "Days since the customer's most recent purchase.",
+    "frequency": "Number of distinct orders placed.",
+    "monetary": "Total net revenue from the customer.",
+    "avg_order_value": "Mean value of the customer's orders.",
+    "tenure_days": "Days between first and last purchase.",
+    "avg_days_between_orders": "Mean gap between consecutive orders.",
+    "distinct_products": "Count of unique products ever bought.",
+    "total_items": "Total units purchased.",
+    "return_rate": "Share of the customer's orders that were cancelled.",
+    "recency_ratio": "Recency divided by the customer's typical inter-order gap. Above 1 means they are overdue relative to their own habit."
+  },
+  "feature_count": 10,
+  "preprocessing": "StandardScaler fitted on the training fold only.",
+  "hyperparameters": {
+    "class_weight": "balanced",
+    "solver": "lbfgs",
+    "max_iter": 2000,
+    "penalty": "l2",
+    "random_state": 42
+  },
+  "training_config": {
+    "observation_days": 90,
+    "test_size": 0.25,
+    "stratified": true
+  },
+  "dataset": {
+    "customers": 5283,
+    "churned": 2992,
+    "retained": 2291,
+    "churn_rate_pct": 56.63,
+    "cutoff_date": "2011-09-10",
+    "max_date": "2011-12-09",
+    "observation_days": 90,
+    "feature_window_days": 648,
+    "excluded_new_customers": 659
+  },
+  "metrics": {
+    "roc_auc": 0.8036,
+    "pr_auc": 0.8287,
+    "accuracy": 0.7313,
+    "precision": 0.8009,
+    "recall": 0.6992,
+    "f1": 0.7466,
+    "brier_score": 0.1821,
+    "confusion_matrix": {
+      "true_negatives": 443,
+      "false_positives": 130,
+      "false_negatives": 225,
+      "true_positives": 523
+    },
+    "cross_validation": {
+      "folds": 5,
+      "roc_auc_mean": 0.7922,
+      "roc_auc_std": 0.0111,
+      "scores": [
+        0.8006,
+        0.782,
+        0.7857,
+        0.7826,
+        0.8099
+      ]
+    },
+    "test_set_size": 1321,
+    "train_set_size": 3962,
+    "positive_class_rate": 0.5662,
+    "majority_class_baseline_accuracy": 0.5662,
+    "decision_threshold": 0.5
+  },
+  "feature_importance": [
+    {
+      "feature": "recency",
+      "coefficient": 0.7244,
+      "abs_coefficient": 0.7244,
+      "odds_ratio": 2.0635,
+      "direction": "increases churn risk",
+      "description": "Days since the customer's most recent purchase."
+    },
+    {
+      "feature": "frequency",
+      "coefficient": -0.4969,
+      "abs_coefficient": 0.4969,
+      "odds_ratio": 0.6084,
+      "direction": "reduces churn risk",
+      "description": "Number of distinct orders placed."
+    },
+    {
+      "feature": "distinct_products",
+      "coefficient": -0.4076,
+      "abs_coefficient": 0.4076,
+      "odds_ratio": 0.6652,
+      "direction": "reduces churn risk",
+      "description": "Count of unique products ever bought."
+    },
+    {
+      "feature": "avg_days_between_orders",
+      "coefficient": 0.2663,
+      "abs_coefficient": 0.2663,
+      "odds_ratio": 1.3051,
+      "direction": "increases churn risk",
+      "description": "Mean gap between consecutive orders."
+    },
+    {
+      "feature": "return_rate",
+      "coefficient": -0.0773,
+      "abs_coefficient": 0.0773,
+      "odds_ratio": 0.9257,
+      "direction": "reduces churn risk",
+      "description": "Share of the customer's orders that were cancelled."
+    },
+    {
+      "feature": "total_items",
+      "coefficient": 0.0544,
+      "abs_coefficient": 0.0544,
+      "odds_ratio": 1.0559,
+      "direction": "increases churn risk",
+      "description": "Total units purchased."
+    },
+    {
+      "feature": "monetary",
+      "coefficient": -0.0339,
+      "abs_coefficient": 0.0339,
+      "odds_ratio": 0.9666,
+      "direction": "reduces churn risk",
+      "description": "Total net revenue from the customer."
+    },
+    {
+      "feature": "avg_order_value",
+      "coefficient": -0.0234,
+      "abs_coefficient": 0.0234,
+      "odds_ratio": 0.9769,
+      "direction": "reduces churn risk",
+      "description": "Mean value of the customer's orders."
+    },
+    {
+      "feature": "recency_ratio",
+      "coefficient": -0.0075,
+      "abs_coefficient": 0.0075,
+      "odds_ratio": 0.9926,
+      "direction": "reduces churn risk",
+      "description": "Recency divided by the customer's typical inter-order gap. Above 1 means they are overdue relative to their own habit."
+    },
+    {
+      "feature": "tenure_days",
+      "coefficient": -0.0024,
+      "abs_coefficient": 0.0024,
+      "odds_ratio": 0.9976,
+      "direction": "reduces churn risk",
+      "description": "Days between first and last purchase."
+    }
+  ],
+  "threshold_analysis": [
+    {
+      "threshold": 0.3,
+      "customers_flagged": 1027,
+      "pct_flagged": 77.74,
+      "precision": 0.6796,
+      "recall": 0.9332,
+      "f1": 0.7865
+    },
+    {
+      "threshold": 0.4,
+      "customers_flagged": 829,
+      "pct_flagged": 62.76,
+      "precision": 0.7431,
+      "recall": 0.8235,
+      "f1": 0.7812
+    },
+    {
+      "threshold": 0.5,
+      "customers_flagged": 653,
+      "pct_flagged": 49.43,
+      "precision": 0.8009,
+      "recall": 0.6992,
+      "f1": 0.7466
+    },
+    {
+      "threshold": 0.6,
+      "customers_flagged": 512,
+      "pct_flagged": 38.76,
+      "precision": 0.8184,
+      "recall": 0.5602,
+      "f1": 0.6651
+    },
+    {
+      "threshold": 0.7,
+      "customers_flagged": 352,
+      "pct_flagged": 26.65,
+      "precision": 0.8409,
+      "recall": 0.3957,
+      "f1": 0.5382
+    }
+  ],
+  "roc_curve": [
+    {
+      "fpr": 0.0,
+      "tpr": 0.0
+    },
+    {
+      "fpr": 0.0052,
+      "tpr": 0.0936
+    },
+    {
+      "fpr": 0.014,
+      "tpr": 0.1417
+    },
+    {
+      "fpr": 0.0209,
+      "tpr": 0.1751
+    },
+    {
+      "fpr": 0.0297,
+      "tpr": 0.2059
+    },
+    {
+      "fpr": 0.0401,
+      "tpr": 0.2139
+    },
+    {
+      "fpr": 0.0471,
+      "tpr": 0.2781
+    },
+    {
+      "fpr": 0.0541,
+      "tpr": 0.2968
+    },
+    {
+      "fpr": 0.0628,
+      "tpr": 0.3369
+    },
+    {
+      "fpr": 0.0698,
+      "tpr": 0.3503
+    },
+    {
+      "fpr": 0.0873,
+      "tpr": 0.3596
+    },
+    {
+      "fpr": 0.0977,
+      "tpr": 0.3864
+    },
+    {
+      "fpr": 0.1082,
+      "tpr": 0.4078
+    },
+    {
+      "fpr": 0.1169,
+      "tpr": 0.4412
+    },
+    {
+      "fpr": 0.1274,
+      "tpr": 0.4813
+    },
+    {
+      "fpr": 0.1344,
+      "tpr": 0.4893
+    },
+    {
+      "fpr": 0.1414,
+      "tpr": 0.5147
+    },
+    {
+      "fpr": 0.1466,
+      "tpr": 0.5348
+    },
+    {
+      "fpr": 0.1571,
+      "tpr": 0.5588
+    },
+    {
+      "fpr": 0.1675,
+      "tpr": 0.5682
+    },
+    {
+      "fpr": 0.1815,
+      "tpr": 0.6003
+    },
+    {
+      "fpr": 0.1885,
+      "tpr": 0.6136
+    },
+    {
+      "fpr": 0.1955,
+      "tpr": 0.6364
+    },
+    {
+      "fpr": 0.2077,
+      "tpr": 0.6551
+    },
+    {
+      "fpr": 0.2164,
+      "tpr": 0.6725
+    },
+    {
+      "fpr": 0.2234,
+      "tpr": 0.6858
+    },
+    {
+      "fpr": 0.2339,
+      "tpr": 0.7019
+    },
+    {
+      "fpr": 0.2391,
+      "tpr": 0.7166
+    },
+    {
+      "fpr": 0.2496,
+      "tpr": 0.7259
+    },
+    {
+      "fpr": 0.2583,
+      "tpr": 0.734
+    },
+    {
+      "fpr": 0.2723,
+      "tpr": 0.7406
+    },
+    {
+      "fpr": 0.2897,
+      "tpr": 0.754
+    },
+    {
+      "fpr": 0.2984,
+      "tpr": 0.762
+    },
+    {
+      "fpr": 0.3089,
+      "tpr": 0.7727
+    },
+    {
+      "fpr": 0.3229,
+      "tpr": 0.7861
+    },
+    {
+      "fpr": 0.3421,
+      "tpr": 0.7995
+    },
+    {
+      "fpr": 0.3525,
+      "tpr": 0.8088
+    },
+    {
+      "fpr": 0.363,
+      "tpr": 0.8168
+    },
+    {
+      "fpr": 0.377,
+      "tpr": 0.8262
+    },
+    {
+      "fpr": 0.3944,
+      "tpr": 0.8356
+    },
+    {
+      "fpr": 0.4031,
+      "tpr": 0.8422
+    },
+    {
+      "fpr": 0.4258,
+      "tpr": 0.8543
+    },
+    {
+      "fpr": 0.4415,
+      "tpr": 0.8623
+    },
+    {
+      "fpr": 0.4607,
+      "tpr": 0.8676
+    },
+    {
+      "fpr": 0.4764,
+      "tpr": 0.8797
+    },
+    {
+      "fpr": 0.5026,
+      "tpr": 0.8944
+    },
+    {
+      "fpr": 0.5201,
+      "tpr": 0.9064
+    },
+    {
+      "fpr": 0.534,
+      "tpr": 0.9118
+    },
+    {
+      "fpr": 0.548,
+      "tpr": 0.9211
+    },
+    {
+      "fpr": 0.5707,
+      "tpr": 0.9318
+    },
+    {
+      "fpr": 0.5881,
+      "tpr": 0.9425
+    },
+    {
+      "fpr": 0.6003,
+      "tpr": 0.9519
+    },
+    {
+      "fpr": 0.63,
+      "tpr": 0.9586
+    },
+    {
+      "fpr": 0.6649,
+      "tpr": 0.9666
+    },
+    {
+      "fpr": 0.7086,
+      "tpr": 0.9706
+    },
+    {
+      "fpr": 0.7417,
+      "tpr": 0.9759
+    },
+    {
+      "fpr": 0.7522,
+      "tpr": 0.9813
+    },
+    {
+      "fpr": 0.8098,
+      "tpr": 0.9866
+    },
+    {
+      "fpr": 0.8517,
+      "tpr": 0.9933
+    },
+    {
+      "fpr": 1.0,
+      "tpr": 1.0
+    }
+  ],
+  "environment": {
+    "python": "3.12.4",
+    "scikit_learn": "1.5.2",
+    "numpy": "1.26.4",
+    "pandas": "2.2.3"
+  }
+}
