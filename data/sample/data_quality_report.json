@@ -1,0 +1,439 @@
+{
+  "report_version": "1.0",
+  "generated_at": "2026-07-31T05:49:36.975877+00:00",
+  "source_file": "UCI Online Retail II",
+  "summary": {
+    "rows_in": 1067371,
+    "rows_out": 1033027,
+    "rows_dropped": 34344,
+    "rows_modified": 8484,
+    "retention_rate_pct": 96.78,
+    "started_at": "2026-07-31T05:46:59.154116+00:00",
+    "finished_at": "2026-07-31T05:49:36.974725+00:00"
+  },
+  "decisions": [
+    {
+      "rule": "quantity_not_numeric",
+      "action": "retained",
+      "rows_affected": 0,
+      "pct_of_input": 0.0,
+      "reason": "All quantity values parsed as numeric.",
+      "examples": []
+    },
+    {
+      "rule": "price_not_numeric",
+      "action": "retained",
+      "rows_affected": 0,
+      "pct_of_input": 0.0,
+      "reason": "All unit price values parsed as numeric.",
+      "examples": []
+    },
+    {
+      "rule": "invoice_date_unparseable",
+      "action": "retained",
+      "rows_affected": 0,
+      "pct_of_input": 0.0,
+      "reason": "All invoice dates parsed successfully.",
+      "examples": []
+    },
+    {
+      "rule": "invoice_no_missing",
+      "action": "retained",
+      "rows_affected": 0,
+      "pct_of_input": 0.0,
+      "reason": "All rows carry an invoice number.",
+      "examples": []
+    },
+    {
+      "rule": "stock_code_missing",
+      "action": "retained",
+      "rows_affected": 0,
+      "pct_of_input": 0.0,
+      "reason": "All rows carry a stock code.",
+      "examples": []
+    },
+    {
+      "rule": "cancelled_invoices",
+      "action": "flagged",
+      "rows_affected": 19494,
+      "pct_of_input": 1.8264,
+      "reason": "Invoice numbers prefixed 'C' are cancellations/returns. RETAINED and flagged is_cancelled=True so returns analysis is possible; queries exclude them from gross revenue explicitly.",
+      "examples": [
+        {
+          "invoice_no": "C489449",
+          "stock_code": "22087",
+          "description": "PAPER BUNTING WHITE LACE",
+          "quantity": -12,
+          "unit_price": 2.95,
+          "customer_id": 16321.0,
+          "invoice_date": "2009-12-01T10:33:00"
+        },
+        {
+          "invoice_no": "C489449",
+          "stock_code": "85206A",
+          "description": "CREAM FELT EASTER EGG BASKET",
+          "quantity": -6,
+          "unit_price": 1.65,
+          "customer_id": 16321.0,
+          "invoice_date": "2009-12-01T10:33:00"
+        },
+        {
+          "invoice_no": "C489449",
+          "stock_code": "21895",
+          "description": "POTTING SHED SOW 'N' GROW SET",
+          "quantity": -4,
+          "unit_price": 4.25,
+          "customer_id": 16321.0,
+          "invoice_date": "2009-12-01T10:33:00"
+        }
+      ]
+    },
+    {
+      "rule": "negative_quantity",
+      "action": "flagged",
+      "rows_affected": 22950,
+      "pct_of_input": 2.1501,
+      "reason": "Negative quantities represent returned goods. RETAINED so they net correctly against revenue rather than inflating it.",
+      "examples": [
+        {
+          "invoice_no": "C489449",
+          "stock_code": "22087",
+          "description": "PAPER BUNTING WHITE LACE",
+          "quantity": -12,
+          "unit_price": 2.95,
+          "customer_id": 16321.0,
+          "invoice_date": "2009-12-01T10:33:00"
+        },
+        {
+          "invoice_no": "C489449",
+          "stock_code": "85206A",
+          "description": "CREAM FELT EASTER EGG BASKET",
+          "quantity": -6,
+          "unit_price": 1.65,
+          "customer_id": 16321.0,
+          "invoice_date": "2009-12-01T10:33:00"
+        },
+        {
+          "invoice_no": "C489449",
+          "stock_code": "21895",
+          "description": "POTTING SHED SOW 'N' GROW SET",
+          "quantity": -4,
+          "unit_price": 4.25,
+          "customer_id": 16321.0,
+          "invoice_date": "2009-12-01T10:33:00"
+        }
+      ]
+    },
+    {
+      "rule": "negative_qty_without_c_prefix",
+      "action": "modified",
+      "rows_affected": 3457,
+      "pct_of_input": 0.3239,
+      "reason": "Negative quantity on a non-'C' invoice - reclassified as is_cancelled=True so the flag matches the economics of the row.",
+      "examples": [
+        {
+          "invoice_no": "489464",
+          "stock_code": "21733",
+          "description": "85123a mixed",
+          "quantity": -96,
+          "unit_price": 0.0,
+          "customer_id": null,
+          "invoice_date": "2009-12-01T10:52:00"
+        },
+        {
+          "invoice_no": "489463",
+          "stock_code": "71477",
+          "description": "short",
+          "quantity": -240,
+          "unit_price": 0.0,
+          "customer_id": null,
+          "invoice_date": "2009-12-01T10:52:00"
+        },
+        {
+          "invoice_no": "489467",
+          "stock_code": "85123A",
+          "description": "21733 mixed",
+          "quantity": -192,
+          "unit_price": 0.0,
+          "customer_id": null,
+          "invoice_date": "2009-12-01T10:53:00"
+        }
+      ]
+    },
+    {
+      "rule": "cancelled_invoice_with_positive_qty",
+      "action": "flagged",
+      "rows_affected": 1,
+      "pct_of_input": 0.0001,
+      "reason": "Invoice is 'C'-prefixed (a cancellation) but the quantity is positive, so the row contributes positive revenue to the returns bucket. RETAINED with is_cancelled=True - the explicit C-prefix is trusted over the sign - but flagged here because the two signals disagree and the row is therefore ambiguous.",
+      "examples": [
+        {
+          "invoice_no": "C496350",
+          "stock_code": "M",
+          "description": "Manual",
+          "quantity": 1,
+          "unit_price": 373.57,
+          "customer_id": null,
+          "invoice_date": "2010-02-01T08:24:00"
+        }
+      ]
+    },
+    {
+      "rule": "zero_quantity",
+      "action": "retained",
+      "rows_affected": 0,
+      "pct_of_input": 0.0,
+      "reason": "No zero-quantity rows found.",
+      "examples": []
+    },
+    {
+      "rule": "negative_unit_price",
+      "action": "dropped",
+      "rows_affected": 5,
+      "pct_of_input": 0.0005,
+      "reason": "Negative unit price is not economically meaningful (returns are expressed via negative quantity, not negative price); these are debt-adjustment artefacts.",
+      "examples": [
+        {
+          "invoice_no": "A506401",
+          "stock_code": "B",
+          "description": "Adjust bad debt",
+          "quantity": 1,
+          "unit_price": -53594.36,
+          "customer_id": null,
+          "invoice_date": "2010-04-29T13:36:00"
+        },
+        {
+          "invoice_no": "A516228",
+          "stock_code": "B",
+          "description": "Adjust bad debt",
+          "quantity": 1,
+          "unit_price": -44031.79,
+          "customer_id": null,
+          "invoice_date": "2010-07-19T11:24:00"
+        },
+        {
+          "invoice_no": "A528059",
+          "stock_code": "B",
+          "description": "Adjust bad debt",
+          "quantity": 1,
+          "unit_price": -38925.87,
+          "customer_id": null,
+          "invoice_date": "2010-10-20T12:04:00"
+        }
+      ]
+    },
+    {
+      "rule": "zero_unit_price",
+      "action": "flagged",
+      "rows_affected": 6202,
+      "pct_of_input": 0.5811,
+      "reason": "Zero-price lines are free samples, promotional items or manual adjustments. RETAINED (they are genuine activity) but contribute no revenue.",
+      "examples": [
+        {
+          "invoice_no": "489464",
+          "stock_code": "21733",
+          "description": "85123a mixed",
+          "quantity": -96,
+          "unit_price": 0.0,
+          "customer_id": null,
+          "invoice_date": "2009-12-01T10:52:00"
+        },
+        {
+          "invoice_no": "489463",
+          "stock_code": "71477",
+          "description": "short",
+          "quantity": -240,
+          "unit_price": 0.0,
+          "customer_id": null,
+          "invoice_date": "2009-12-01T10:52:00"
+        },
+        {
+          "invoice_no": "489467",
+          "stock_code": "85123A",
+          "description": "21733 mixed",
+          "quantity": -192,
+          "unit_price": 0.0,
+          "customer_id": null,
+          "invoice_date": "2009-12-01T10:53:00"
+        }
+      ]
+    },
+    {
+      "rule": "implausible_quantity",
+      "action": "dropped",
+      "rows_affected": 2,
+      "pct_of_input": 0.0002,
+      "reason": "|quantity| > 80,000 is orders of magnitude beyond any genuine order in this dataset and skews every aggregate; treated as data entry error.",
+      "examples": [
+        {
+          "invoice_no": "581483",
+          "stock_code": "23843",
+          "description": "PAPER CRAFT , LITTLE BIRDIE",
+          "quantity": 80995,
+          "unit_price": 2.08,
+          "customer_id": 16446.0,
+          "invoice_date": "2011-12-09T09:15:00"
+        },
+        {
+          "invoice_no": "C581484",
+          "stock_code": "23843",
+          "description": "PAPER CRAFT , LITTLE BIRDIE",
+          "quantity": -80995,
+          "unit_price": 2.08,
+          "customer_id": 16446.0,
+          "invoice_date": "2011-12-09T09:27:00"
+        }
+      ]
+    },
+    {
+      "rule": "implausible_unit_price",
+      "action": "retained",
+      "rows_affected": 0,
+      "pct_of_input": 0.0,
+      "reason": "No implausible unit prices found.",
+      "examples": []
+    },
+    {
+      "rule": "exact_duplicate_rows",
+      "action": "dropped",
+      "rows_affected": 34337,
+      "pct_of_input": 3.217,
+      "reason": "Identical invoice/product/qty/price/timestamp - a data-entry artefact, not two separate sales. First occurrence kept.",
+      "examples": [
+        {
+          "invoice_no": "489517",
+          "stock_code": "21912",
+          "description": "VINTAGE SNAKES & LADDERS",
+          "quantity": 1,
+          "unit_price": 3.75,
+          "customer_id": 16329.0,
+          "invoice_date": "2009-12-01T11:34:00"
+        },
+        {
+          "invoice_no": "489517",
+          "stock_code": "22130",
+          "description": "PARTY CONE CHRISTMAS DECORATION",
+          "quantity": 6,
+          "unit_price": 0.85,
+          "customer_id": 16329.0,
+          "invoice_date": "2009-12-01T11:34:00"
+        },
+        {
+          "invoice_no": "489517",
+          "stock_code": "22319",
+          "description": "HAIRCLIPS FORTIES FABRIC ASSORTED",
+          "quantity": 12,
+          "unit_price": 0.65,
+          "customer_id": 16329.0,
+          "invoice_date": "2009-12-01T11:34:00"
+        }
+      ]
+    },
+    {
+      "rule": "missing_customer_id",
+      "action": "flagged",
+      "rows_affected": 235146,
+      "pct_of_input": 22.0304,
+      "reason": "Guest checkouts with no customer id. RETAINED with customer_id=NULL: the revenue is real and belongs in sales totals, but these rows are excluded from RFM/churn, which require a customer identity.",
+      "examples": [
+        {
+          "invoice_no": "489464",
+          "stock_code": "21733",
+          "description": "85123a mixed",
+          "quantity": -96,
+          "unit_price": 0.0,
+          "customer_id": null,
+          "invoice_date": "2009-12-01T10:52:00"
+        },
+        {
+          "invoice_no": "489463",
+          "stock_code": "71477",
+          "description": "short",
+          "quantity": -240,
+          "unit_price": 0.0,
+          "customer_id": null,
+          "invoice_date": "2009-12-01T10:52:00"
+        },
+        {
+          "invoice_no": "489467",
+          "stock_code": "85123A",
+          "description": "21733 mixed",
+          "quantity": -192,
+          "unit_price": 0.0,
+          "customer_id": null,
+          "invoice_date": "2009-12-01T10:53:00"
+        }
+      ]
+    },
+    {
+      "rule": "service_stock_codes",
+      "action": "flagged",
+      "rows_affected": 5716,
+      "pct_of_input": 0.5355,
+      "reason": "Non-product lines (postage, bank charges, manual adjustments). RETAINED because they are real revenue/cost, but flagged so product analytics can exclude them.",
+      "examples": [
+        {
+          "invoice_no": "489439",
+          "stock_code": "POST",
+          "description": "POSTAGE",
+          "quantity": 3,
+          "unit_price": 18.0,
+          "customer_id": 12682,
+          "invoice_date": "2009-12-01T09:28:00"
+        },
+        {
+          "invoice_no": "489444",
+          "stock_code": "POST",
+          "description": "POSTAGE",
+          "quantity": 1,
+          "unit_price": 141.0,
+          "customer_id": 12636,
+          "invoice_date": "2009-12-01T09:55:00"
+        },
+        {
+          "invoice_no": "489447",
+          "stock_code": "POST",
+          "description": "POSTAGE",
+          "quantity": 1,
+          "unit_price": 130.0,
+          "customer_id": 12362,
+          "invoice_date": "2009-12-01T10:10:00"
+        }
+      ]
+    },
+    {
+      "rule": "missing_description",
+      "action": "modified",
+      "rows_affected": 4275,
+      "pct_of_input": 0.4005,
+      "reason": "Description was blank. Filled with 'UNKNOWN PRODUCT' - the transaction is still valid and the stock code identifies the item.",
+      "examples": []
+    },
+    {
+      "rule": "missing_country",
+      "action": "modified",
+      "rows_affected": 752,
+      "pct_of_input": 0.0705,
+      "reason": "Country was blank or literal 'Unspecified'. Normalised to 'Unspecified' so it forms one explicit bucket instead of several.",
+      "examples": []
+    }
+  ],
+  "metrics": {
+    "date_range_start": "2009-12-01T07:45:00",
+    "date_range_end": "2011-12-09T12:50:00",
+    "unique_invoices": 53621,
+    "unique_customers": 5942,
+    "unique_products": 5130,
+    "unique_countries": 43,
+    "gross_revenue": 20307238.98,
+    "returns_value": -1293581.0100000002,
+    "net_revenue": 19013657.96999999,
+    "pct_rows_without_customer": 22.76,
+    "loaded_dim_date": 739,
+    "loaded_dim_country": 43,
+    "loaded_dim_product": 5130,
+    "loaded_dim_customer": 5942,
+    "loaded_fact_sales": 1033027
+  },
+  "warnings": []
+}
