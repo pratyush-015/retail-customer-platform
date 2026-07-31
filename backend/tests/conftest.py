@@ -72,7 +72,17 @@ def synthetic_transactions() -> pd.DataFrame:
 
     # --- 1001: 3 invoices, last on 2011-12-09 (recency 1) ------------------
     # First invoice deliberately has 30 lines of 10.00 = 300.00.
-    rows += [_line("536365", 1001, "2011-01-15T10:00:00", 1, 10.00) for _ in range(30)]
+    #
+    # Each line must carry a DISTINCT stock code. Thirty lines with the same
+    # invoice, product, quantity, price and timestamp are exact duplicates -
+    # a data-entry artefact the ETL correctly collapses to one row - not a
+    # 30-product basket. Using one repeated code made this fixture represent
+    # data the cleaner would never emit, so the RFM tests were asserting
+    # against an impossible input.
+    rows += [
+        _line("536365", 1001, "2011-01-15T10:00:00", 1, 10.00, stock=f"1001L{i:02d}")
+        for i in range(30)
+    ]
     rows.append(_line("536366", 1001, "2011-06-20T11:00:00", 10, 20.00))  # 200.00
     rows.append(_line("536367", 1001, "2011-12-09T09:00:00", 10, 10.00))  # 100.00
     # 1001 total: 300 + 200 + 100 = 600.00 across 3 invoices
