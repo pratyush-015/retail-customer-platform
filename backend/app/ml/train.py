@@ -11,11 +11,26 @@ more than a marginal lift here.
 
 Three decisions that materially affect the numbers
 --------------------------------------------------
-1. **Features are scaled.** Monetary runs to six figures while return_rate is
-   bounded by 1. Unscaled, the L2 penalty would effectively only regularise the
-   large-magnitude features, and the coefficients would be incomparable. The
-   scaler is fitted on the training fold only and saved inside the pipeline, so
-   inference applies exactly the same transformation.
+1. **Features are log-compressed, then scaled.** Two distinct problems, and
+   scaling alone only solves the first.
+
+   *Scale*: monetary runs to six figures while return_rate is bounded by 1.
+   Unscaled, the L2 penalty would effectively only regularise the
+   large-magnitude features, and the coefficients would be incomparable.
+
+   *Shape*: several features are severely right-skewed (monetary skew 25.7,
+   frequency 12.7). StandardScaler does not fix this - centring and dividing by
+   sigma leaves the tail just as many sigma from the mean as it started. The
+   first version of this model shipped without the log step and scored a
+   155-order customer at P(churn)=0.001 despite 373 days of silence, because
+   their frequency sat at z=14.5 and contributed -7.2 to the log-odds while
+   recency (max z=3.0 across the whole population) could only contribute +0.67.
+   The model was reading "big spender" and ignoring "gone".
+
+   ``log1p`` on the skewed columns brings every feature into a comparable
+   dynamic range, so one linear coefficient can serve the whole distribution.
+   Both steps live inside the pipeline and are fitted on the training fold only,
+   so inference applies exactly the same transformation.
 
 2. **class_weight="balanced".** Roughly 60% of customers churn under a 90-day
    definition, and the business cost is asymmetric: missing a churner who was
@@ -62,7 +77,7 @@ from sklearn.metrics import (
 )
 from sklearn.model_selection import cross_val_score, train_test_split
 from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import FunctionTransformer, StandardScaler
 from sqlalchemy.engine import Engine
 
 from app.core.config import get_settings
@@ -70,15 +85,19 @@ from app.core.logging_config import get_logger
 from app.ml.features import (
     FEATURE_DESCRIPTIONS,
     FEATURE_NAMES,
+    SKEWED_FEATURES,
     ChurnDataset,
     build_training_dataset,
+    compress_skew,
 )
 
 logger = get_logger(__name__)
 
 # Model contract version. Bumped when the feature list or preprocessing
 # changes, so a stale artifact can be detected rather than silently misused.
-MODEL_VERSION = "1.0.0"
+# 1.1.0 - added the log1p compression step ahead of the scaler. Preprocessing
+# changed, so v1.0.0 artifacts are not interchangeable with this code.
+MODEL_VERSION = "1.1.0"
 
 THRESHOLD_SWEEP = [0.3, 0.4, 0.5, 0.6, 0.7]
 
@@ -105,6 +124,13 @@ def _feature_importance(pipeline: Pipeline) -> list[dict[str, Any]]:
     Because inputs are standardised, a coefficient is the change in log-odds per
     one standard deviation of that feature, which makes them directly
     comparable. The sign carries the story: positive pushes toward churn.
+
+    For the log-compressed features (see ``SKEWED_FEATURES``) that standard
+    deviation is measured on the ``log1p`` scale, so the effect is multiplicative
+    in the original units - a one-sigma move is a proportional change in spend,
+    not a fixed number of pounds. The ranking and the sign remain directly
+    readable, which is what the dashboard renders; the metadata flags which
+    features were transformed so the exact wording can stay honest.
     """
     model: LogisticRegression = pipeline.named_steps["model"]
     coefficients = model.coef_[0]
@@ -191,8 +217,11 @@ def train_churn_model(
         y_train.mean() * 100, y_test.mean() * 100,
     )
 
-    # Scaler inside the pipeline so inference cannot forget to apply it.
+    # Both preprocessing steps live inside the pipeline so inference cannot
+    # forget to apply them, and so the scaler's statistics are learnt from the
+    # already-compressed values rather than the raw ones.
     pipeline = Pipeline([
+        ("compress", FunctionTransformer(compress_skew, validate=False)),
         ("scaler", StandardScaler()),
         ("model", LogisticRegression(
             class_weight="balanced",
@@ -290,7 +319,12 @@ def _build_metadata(
         "features": FEATURE_NAMES,
         "feature_descriptions": FEATURE_DESCRIPTIONS,
         "feature_count": len(FEATURE_NAMES),
-        "preprocessing": "StandardScaler fitted on the training fold only.",
+        "preprocessing": (
+            "log1p applied to the right-skewed features, then StandardScaler. "
+            "Both fitted on the training fold only and stored inside the "
+            "pipeline so inference cannot diverge from training."
+        ),
+        "log_transformed_features": SKEWED_FEATURES,
         "hyperparameters": {
             "class_weight": "balanced",
             "solver": "lbfgs",

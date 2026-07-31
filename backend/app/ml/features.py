@@ -61,6 +61,58 @@ FEATURE_NAMES: list[str] = [
     "recency_ratio",
 ]
 
+# Features whose raw distribution is heavy-tailed enough to break a linear model.
+#
+# Measured skew on this dataset: monetary 25.7, total_items 22.2, avg_order_value
+# 13.3, frequency 12.7, recency_ratio 10.4, distinct_products 6.2. Compare
+# recency at 0.9 and tenure_days at 0.4.
+#
+# Why this matters more than it looks: StandardScaler fixes *scale*, not *shape*.
+# Centring and dividing by sigma leaves a skewed variable's tail exactly as far
+# out in sigma units as it started - the top customer sat at z=14.5 on frequency
+# and z=52 on monetary, while recency (which is what actually defines churn)
+# never exceeded z=3.0. A single linear coefficient then cannot serve both ends
+# of such a distribution, and the tail dominates the log-odds: a customer with
+# 155 orders scored P(churn)=0.001 despite not having bought for 373 days,
+# because frequency alone contributed -7.2 to the logit.
+#
+# log1p compresses those tails to roughly the same dynamic range as the
+# well-behaved features, so the fitted coefficients reflect predictive value
+# rather than distributional accident. It is applied inside the pipeline, before
+# the scaler, so inference cannot forget it.
+SKEWED_FEATURES: list[str] = [
+    "frequency",
+    "monetary",
+    "avg_order_value",
+    "avg_days_between_orders",
+    "distinct_products",
+    "total_items",
+    "recency_ratio",
+]
+
+# Positional indices, resolved once. The transform runs on a bare ndarray inside
+# the sklearn pipeline, where column names are no longer available.
+_SKEWED_INDICES: list[int] = [FEATURE_NAMES.index(name) for name in SKEWED_FEATURES]
+
+
+def compress_skew(X):
+    """Apply ``log1p`` to the heavy-tailed feature columns.
+
+    Must stay a module-level named function: it is pickled by reference into the
+    model artifact, so a lambda or closure here would make the artifact
+    unloadable in a fresh process.
+
+    Negative values are clipped to 0 before the transform. ``monetary`` can go
+    negative in principle (a customer whose un-flagged returns exceed their
+    purchases), and ``log1p`` is undefined below -1. Clipping treats "net
+    negative lifetime value" as "zero value", which is the right reading for a
+    magnitude feature and avoids emitting NaN into the model.
+    """
+    X = np.asarray(X, dtype=float).copy()
+    X[:, _SKEWED_INDICES] = np.log1p(np.clip(X[:, _SKEWED_INDICES], 0, None))
+    return X
+
+
 FEATURE_DESCRIPTIONS: dict[str, str] = {
     "recency": "Days since the customer's most recent purchase.",
     "frequency": "Number of distinct orders placed.",
@@ -345,6 +397,8 @@ def latest_warehouse_date(engine: Engine) -> date:
 __all__ = [
     "FEATURE_NAMES",
     "FEATURE_DESCRIPTIONS",
+    "SKEWED_FEATURES",
+    "compress_skew",
     "ChurnDataset",
     "load_transactions",
     "compute_features",

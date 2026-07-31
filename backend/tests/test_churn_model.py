@@ -24,7 +24,9 @@ from app.core.exceptions import InsufficientDataError
 from app.ml.features import (
     FEATURE_DESCRIPTIONS,
     FEATURE_NAMES,
+    SKEWED_FEATURES,
     compute_features,
+    compress_skew,
 )
 from app.ml.train import MODEL_VERSION, THRESHOLD_SWEEP, _feature_importance
 
@@ -569,3 +571,238 @@ def test_threshold_analysis_shows_the_expected_tradeoff(metadata: dict):
     # Stricter threshold flags fewer customers and catches fewer churners.
     assert recalls == sorted(recalls, reverse=True)
     assert flagged == sorted(flagged, reverse=True)
+
+
+# ---------------------------------------------------------------------------
+# Skew compression
+#
+# These exist because of a bug the rest of this suite could not see. Model
+# v1.0.0 scored customer 17850 - 155 orders, £51k, silent for 373 days - at
+# P(churn)=0.001. ROC-AUC was 0.80, the confusion matrix was balanced, the
+# coefficient signs were all correct, and every test above passed. The model
+# ranked the bulk of the distribution fine and only inverted in the tail, which
+# no aggregate metric reports.
+#
+# Cause: StandardScaler fixes scale, not shape. Raw frequency has skew 12.7, so
+# after z-scoring this customer still sat at z=13.0, contributing -8.06 to the
+# log-odds, while recency (bounded 0-738 days, so max z=3.0) could contribute
+# at most +0.66. The linear model could not express "loyal but gone".
+#
+# Verified by ablation rather than argument: retraining with only the scaler
+# reproduces P(churn)=0.0004 for this profile, and log1p alone lifts it to
+# 0.2414 while ROC-AUC moves 0.7967 -> 0.8030.
+# ---------------------------------------------------------------------------
+def test_compress_skew_only_transforms_the_skewed_columns():
+    """Bounded features must pass through untouched."""
+    row = pd.DataFrame([[100.0, 50.0, 9000.0, 180.0, 300, 7.0, 40, 800, 0.25, 3.0]],
+                       columns=FEATURE_NAMES)
+
+    out = compress_skew(row.to_numpy())[0]
+
+    for i, name in enumerate(FEATURE_NAMES):
+        raw = row.iloc[0, i]
+        if name in SKEWED_FEATURES:
+            assert out[i] == pytest.approx(np.log1p(raw))
+        else:
+            assert out[i] == pytest.approx(raw), f"{name} should not be transformed"
+
+
+def test_compress_skew_preserves_order_and_handles_zero():
+    """log1p is monotonic, so it cannot reorder customers.
+
+    Order preservation is what makes this safe: compression changes how far
+    apart customers are, never who is ahead of whom. And log1p(0)=0 keeps a
+    genuine zero (a customer with no returns) finite - plain log would give
+    -inf and poison the scaler.
+    """
+    low = pd.DataFrame([[10, 1, 0.0, 5.0, 30, 2.0, 1, 1, 0.0, 0.5]],
+                       columns=FEATURE_NAMES).to_numpy()
+    high = pd.DataFrame([[10, 200, 90000.0, 5.0, 30, 2.0, 300, 9000, 0.0, 0.5]],
+                        columns=FEATURE_NAMES).to_numpy()
+
+    low_out, high_out = compress_skew(low)[0], compress_skew(high)[0]
+
+    monetary = FEATURE_NAMES.index("monetary")
+    assert low_out[monetary] == 0.0          # log1p(0) == 0, not -inf
+    assert np.all(np.isfinite(low_out))
+    assert high_out[monetary] > low_out[monetary]
+    assert high_out[FEATURE_NAMES.index("frequency")] > low_out[FEATURE_NAMES.index("frequency")]
+
+
+def test_compress_skew_actually_reduces_skew():
+    """The point of the transform, measured rather than assumed."""
+    rng = np.random.default_rng(0)
+    heavy = rng.pareto(1.2, size=4000) * 500      # heavy right tail, like monetary
+
+    frame = pd.DataFrame(
+        np.tile(np.array([[10, 5, 0.0, 50.0, 200, 8.0, 12, 60, 0.1, 1.0]]), (4000, 1)),
+        columns=FEATURE_NAMES,
+    )
+    frame["monetary"] = heavy
+
+    def skew(values: np.ndarray) -> float:
+        centred = values - values.mean()
+        return float((centred ** 3).mean() / (values.std() ** 3 + 1e-12))
+
+    before = skew(frame["monetary"].to_numpy())
+    after = skew(compress_skew(frame.to_numpy())[:, FEATURE_NAMES.index("monetary")])
+
+    assert before > 5, "fixture should be heavily skewed to begin with"
+    assert after < before / 4, f"skew barely moved: {before:.1f} -> {after:.1f}"
+
+
+def test_log_compression_bounds_extreme_z_scores():
+    """The mechanism behind the v1.0.0 bug, isolated.
+
+    A linear model's log-odds are ``coef . z``. Recency is naturally bounded
+    (0-738 days in this dataset), so its z-score cannot exceed ~3. Purchase
+    magnitude has no such ceiling, so one whale's frequency reaches a double
+    digit z-score and can outvote recency no matter what recency says.
+    ``log1p`` removes the asymmetry by putting both on a comparable scale.
+
+    Numbers measured by ablation on the real training set (5,283 customers,
+    56.6% churn), recorded here because they are the evidence for the fix:
+
+    ==========================  ============  ================
+    dormant whale, 373 days     scaler only   log1p + scaler
+    ==========================  ============  ================
+    max |z|                     13.0          4.5
+    frequency logit             -8.06         -1.40
+    recency logit               +0.66         +0.24
+    P(churn)                    0.0004        0.2414
+    ROC-AUC (full set)          0.7967        0.8030
+    ==========================  ============  ================
+
+    Note the last row: AUC barely moved, so no aggregate metric would ever
+    have surfaced this. Note also that the *direction* was right in both
+    (0.0004 > 0.0001 for the active twin), so a rank-only assertion would
+    have passed on the broken model too. The failure is one of calibration in
+    the tail, which is what this test pins down.
+
+    The end-to-end guard on the shipped artifact lives in
+    ``test_shipped_model_ranks_dormant_above_active_for_identical_value``.
+    """
+    rng = np.random.default_rng(11)
+    n = 4000
+
+    # Heavy-tailed by construction, like real purchase counts and spend.
+    frequency = rng.lognormal(1.3, 0.9, n)
+    population = pd.DataFrame(
+        {
+            "recency": rng.integers(1, 740, n).astype(float),
+            "frequency": frequency,
+            "monetary": frequency * rng.lognormal(4.0, 0.8, n),
+            "avg_order_value": rng.lognormal(4.0, 0.7, n),
+            "tenure_days": rng.integers(1, 740, n).astype(float),
+            "avg_days_between_orders": rng.lognormal(2.5, 0.9, n),
+            "distinct_products": frequency * rng.uniform(1, 6, n),
+            "total_items": frequency * rng.lognormal(3.0, 0.9, n),
+            "return_rate": rng.uniform(0, 0.3, n),
+            "recency_ratio": rng.lognormal(1.0, 1.0, n),
+        },
+        columns=FEATURE_NAMES,
+    )
+
+    # Customer 17850's actual profile - the one scored 0.001 by v1.0.0.
+    whale = pd.DataFrame(
+        [{
+            "recency": 373.0, "frequency": 155.0, "monetary": 51000.0,
+            "avg_order_value": 330.0, "tenure_days": 362.0,
+            "avg_days_between_orders": 2.4, "distinct_products": 100.0,
+            "total_items": 21000.0, "return_rate": 0.03, "recency_ratio": 155.0,
+        }],
+        columns=FEATURE_NAMES,
+    )
+
+    raw_scaler = StandardScaler().fit(population)
+    compressed_scaler = StandardScaler().fit(compress_skew(population.to_numpy()))
+
+    raw_z = np.abs(raw_scaler.transform(whale))[0]
+    compressed_z = np.abs(
+        compressed_scaler.transform(compress_skew(whale.to_numpy()))
+    )[0]
+
+    # Recency's ceiling: the largest |z| ANY customer's recency can reach. This
+    # is the most leverage recency could ever have, and it is unaffected by
+    # compression because recency is not a transformed column.
+    recency_col = FEATURE_NAMES.index("recency")
+    recency_ceiling = np.abs(raw_scaler.transform(population)[:, recency_col]).max()
+
+    magnitude = [FEATURE_NAMES.index(f) for f in SKEWED_FEATURES]
+    raw_leverage = raw_z[magnitude].max() / recency_ceiling
+    compressed_leverage = compressed_z[magnitude].max() / recency_ceiling
+
+    # The bug, expressed scale-free: how much more leverage a magnitude feature
+    # can exert than recency at its strongest. Absolute z-scores depend on the
+    # population's dispersion; this ratio does not.
+    assert raw_leverage > 10, (
+        f"fixture must reproduce the asymmetry, got {raw_leverage:.1f}x; "
+        "without it the next assertion proves nothing"
+    )
+    assert compressed_leverage < 5, (
+        f"after log1p a magnitude feature still reaches {compressed_leverage:.1f}x "
+        "recency's ceiling, so it can outvote the churn signal on coefficient "
+        "size alone"
+    )
+    assert raw_z.max() / compressed_z.max() > 5, (
+        f"compression should shrink the extreme by an order of magnitude, got "
+        f"{raw_z.max():.1f} -> {compressed_z.max():.1f}"
+    )
+
+
+def test_shipped_pipeline_includes_the_compression_step(metadata: dict):
+    """Guards against the artifact and the code drifting apart."""
+    import joblib
+
+    from app.core.config import get_settings
+
+    path = get_settings().model_file
+    if not path.exists():
+        pytest.skip("model artifact missing")
+
+    bundle = joblib.load(path)
+    steps = list(bundle["pipeline"].named_steps)
+
+    assert steps.index("compress") < steps.index("scaler"), (
+        "compression must run before scaling, or the scaler learns statistics "
+        "from the uncompressed distribution"
+    )
+    assert metadata["log_transformed_features"] == SKEWED_FEATURES
+    assert "log1p" in metadata["preprocessing"]
+
+
+def test_shipped_model_ranks_dormant_above_active_for_identical_value(metadata: dict):
+    """Same customer, two recencies: the dormant one must score higher.
+
+    Uses the real artifact rather than a fixture, so it checks the model that
+    actually serves the dashboard.
+    """
+    import joblib
+
+    from app.core.config import get_settings
+
+    path = get_settings().model_file
+    if not path.exists():
+        pytest.skip("model artifact missing")
+
+    pipeline = joblib.load(path)["pipeline"]
+
+    # A high-value, high-frequency customer - the profile that broke v1.0.0.
+    active = {"recency": 8, "frequency": 155, "monetary": 51000.0,
+              "avg_order_value": 330.0, "tenure_days": 362,
+              "avg_days_between_orders": 2.4, "distinct_products": 100,
+              "total_items": 21000, "return_rate": 0.03, "recency_ratio": 3.3}
+    dormant = {**active, "recency": 373, "recency_ratio": 155.0}
+
+    frame = pd.DataFrame([active, dormant], columns=FEATURE_NAMES)
+    active_score, dormant_score = pipeline.predict_proba(frame)[:, 1]
+
+    assert dormant_score > active_score, (
+        f"dormant whale ({dormant_score:.3f}) must outrank the active one "
+        f"({active_score:.3f})"
+    )
+    # v1.0.0 scored this profile at 0.001 no matter the recency.
+    assert dormant_score > 0.1, (
+        f"a 373-day-dormant customer scoring {dormant_score:.4f} means the "
+        "tail is being swamped by purchase magnitude again"
+    )
