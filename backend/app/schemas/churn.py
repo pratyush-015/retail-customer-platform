@@ -111,6 +111,10 @@ class ChurnPredictionRequest(APIModel):
 
 
 class ChurnPredictionResponse(APIModel):
+    # Same protected-namespace waiver as ModelPerformance above: `model_version`
+    # is the name the metadata file and the UI already use.
+    model_config = APIModel.model_config | {"protected_namespaces": ()}
+
     churn_probability: float = Field(ge=0.0, le=1.0)
     risk_band: RiskBandLiteral
     model_version: str

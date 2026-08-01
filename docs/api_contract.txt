@@ -1,0 +1,243 @@
+﻿11:08:43 | INFO     | httpx                        | HTTP Request: GET http://testserver/openapi.json "HTTP/1.1 200 OK"
+=== GET /api/health -> HealthResponse
+  status: string
+  version: string
+  environment: string
+  components: ComponentHealth[]
+    name: string
+    status: string
+    detail: ?
+
+=== GET /api/kpis/summary -> KPISummary
+  params: start_date?, end_date?
+  total_revenue: number
+  total_orders: integer
+  total_customers: integer
+  avg_order_value: number
+  total_units: integer
+  return_rate_pct: number
+  period_start: ?
+  period_end: ?
+  mom: MoMChange
+    current_period: string
+    previous_period: ?
+    revenue_pct: ?
+    orders_pct: ?
+    customers_pct: ?
+    aov_pct: ?
+
+=== GET /api/sales/trend -> SalesTrend
+  params: granularity?, start_date?, end_date?
+  granularity: string
+  points: TrendPoint[]
+    period: string
+    period_start: string
+    revenue: number
+    orders: integer
+    customers: integer
+    units: integer
+  total_revenue: number
+
+=== GET /api/sales/by-country -> SalesByCountry
+  params: limit?, start_date?, end_date?
+  items: CountryRevenue[]
+    country_id: integer
+    country: string
+    region: ?
+    revenue: number
+    orders: integer
+    customers: integer
+    avg_order_value: number
+    revenue_share_pct: number
+  total_revenue: number
+  country_count: integer
+
+=== GET /api/customers/segments -> SegmentDistribution
+  segments: SegmentStats[]
+    segment: string
+    health: string
+    customer_count: integer
+    customer_pct: number
+    revenue: number
+    revenue_pct: number
+    orders: integer
+    avg_revenue_per_customer: number
+    avg_recency_days: number
+    avg_frequency: number
+    avg_monetary: number
+    avg_churn_risk: ?
+  total_customers: integer
+  attributed_revenue: number
+  computed: boolean
+
+=== GET /api/customers/{customer_id} -> CustomerProfile
+  params: customer_id, history_limit?
+  customer_id: integer
+  country: ?
+  first_purchase_date: ?
+  last_purchase_date: ?
+  tenure_days: ?
+  rfm: RFMDetail
+    recency_days: ?
+    frequency: ?
+    monetary: ?
+    r_score: ?
+    f_score: ?
+    m_score: ?
+    rfm_score: ?
+    segment: ?
+    health: ?
+  rfm_computed: boolean
+  total_orders: ?
+  total_revenue: number
+  total_items: ?
+  avg_order_value: ?
+  distinct_products: ?
+  return_rate: ?
+  avg_days_between_orders: ?
+  revenue_percentile: ?
+  churn_risk_score: ?
+  churn_risk_band: ?
+  is_churned: ?
+  order_history: OrderHistoryEntry[]
+    invoice_no: string
+    order_date: string
+    revenue: number
+    items: integer
+    distinct_products: integer
+    is_cancelled: boolean
+  top_products: TopProduct[]
+    stock_code: string
+    description: ?
+    category: ?
+    revenue: number
+    quantity: integer
+
+=== GET /api/churn/at-risk -> AtRiskResponse
+  params: threshold?, limit?, offset?, segment?, country?
+  items: AtRiskCustomer[]
+    customer_id: integer
+    country: ?
+    segment: ?
+    recency_days: ?
+    frequency: ?
+    total_revenue: number
+    avg_order_value: ?
+    last_purchase_date: ?
+    churn_risk_score: number
+    risk_band: string
+    expected_revenue_loss: number
+  total: integer
+  limit: integer
+  offset: integer
+  threshold: number
+  revenue_at_risk: number
+  expected_revenue_loss: number
+  scored_customers: integer
+
+=== GET /api/churn/model-performance -> ModelPerformance
+  model_version: string
+  model_type: string
+  trained_at: string
+  churn_definition: string
+  features: array[]
+  roc_auc: number
+  pr_auc: ?
+  accuracy: number
+  precision: number
+  recall: number
+  f1: number
+  brier_score: ?
+  baseline_accuracy: ?
+  confusion_matrix: ConfusionMatrix
+    true_negatives: integer
+    false_positives: integer
+    false_negatives: integer
+    true_positives: integer
+  feature_importance: FeatureImportance[]
+    feature: string
+    coefficient: number
+    abs_coefficient: number
+    odds_ratio: number
+    direction: string
+    description: ?
+  roc_curve: ROCPoint[]
+    fpr: number
+    tpr: number
+  threshold_analysis: ThresholdRow[]
+    threshold: number
+    customers_flagged: integer
+    pct_flagged: number
+    precision: number
+    recall: number
+    f1: number
+  cross_validation: ?
+  dataset: ?
+
+=== POST /api/predict/churn -> ChurnPredictionResponse
+  body: ChurnPredictionRequest
+    recency: number
+    frequency: number
+    monetary: number
+    avg_order_value: ?
+    tenure_days: ?
+    avg_days_between_orders: ?
+    distinct_products: ?
+    total_items: ?
+    return_rate: ?
+  churn_probability: number
+  risk_band: string
+  model_version: string
+  features_used: object
+  derived_features: array[]
+  interpretation: string
+
+=== GET /api/stats/hypothesis-test -> HypothesisTestResult
+  params: type?, country_a?, country_b?, top_n?, alpha?
+  test_type: string
+  question: string
+  null_hypothesis: string
+  statistic: ?
+  p_value: ?
+  significant: boolean
+  alpha: number
+  interpretation: string
+  effect_size: ?
+  effect_size_name: ?
+  effect_size_label: ?
+  degrees_of_freedom: ?
+  groups: GroupSummary[]
+    name: string
+    n: ?
+    mean: ?
+    median: ?
+    std: ?
+  assumptions: object
+  details: object
+
+=== GET /api/stats/insights -> InsightsResponse
+  params: alpha?, top_n?
+  tests: HypothesisTestResult[]
+    test_type: string
+    question: string
+    null_hypothesis: string
+    statistic: ?
+    p_value: ?
+    significant: boolean
+    alpha: number
+    interpretation: string
+    effect_size: ?
+    effect_size_name: ?
+    effect_size_label: ?
+    degrees_of_freedom: ?
+    groups: GroupSummary[]
+      name: string
+      n: ?
+      mean: ?
+      median: ?
+      std: ?
+    assumptions: object
+    details: object
+  unavailable: array[]
+  alpha: number
+

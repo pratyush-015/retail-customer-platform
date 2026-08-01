@@ -1,0 +1,45 @@
+# Build context excludes for the BACKEND image, whose context is the repo root.
+# Everything here is either large, machine-specific, or a secret; sending it
+# would slow every build and bust the layer cache on irrelevant changes.
+
+# --- version control / editors ---
+.git
+.gitignore
+.github
+.vscode
+.idea
+
+# --- secrets (only .env.example is tracked, and the image needs neither) ---
+.env
+.env.*
+!.env.example
+
+# --- python noise ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# --- the frontend is a separate image with its own context ---
+frontend/
+
+# --- data: the cached dataset (~45MB) and derived artifacts are produced by
+#     the seed pipeline at runtime, into a mounted volume. Baking them into the
+#     image would make it huge and instantly stale.
+data/
+!data/sample/
+
+# --- docs and screenshots are for humans reading the repo ---
+docs/
+*.md
+!README.md
+
+# --- local sqlite databases ---
+*.db
+*.sqlite3

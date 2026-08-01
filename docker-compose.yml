@@ -1,0 +1,117 @@
+# =============================================================================
+# Local development stack: Postgres + FastAPI + nginx-served React build.
+#
+#   cp .env.example .env
+#   docker compose up --build -d       # start everything
+#   docker compose run --rm seed       # load the data + train the model
+#
+#   Dashboard  http://localhost:3000
+#   API docs   http://localhost:8000/docs
+#
+# The `seed` service is a one-shot job under the `tools` profile, so a plain
+# `up` does not spend ten minutes running ETL before the API is reachable.
+# =============================================================================
+
+services:
+  # --------------------------------------------------------------- database --
+  db:
+    image: postgres:16-alpine
+    container_name: retail-insights-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-retail}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-retail}
+      POSTGRES_DB: ${POSTGRES_DB:-retail_insights}
+    ports:
+      # Published so psql/DBeaver on the host can inspect the warehouse.
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      # `pg_isready` alone reports true during the brief bootstrap phase when
+      # the server is up but the application database does not yet exist, so
+      # the user and db are named explicitly. api/seed wait on this.
+      test:
+        ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-retail} -d ${POSTGRES_DB:-retail_insights}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  # -------------------------------------------------------------- fastapi ----
+  api:
+    build:
+      # Repo root: the backend image needs scripts/ as well as backend/.
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: retail-insights-api
+    restart: unless-stopped
+    environment:
+      # `db` is the compose service name, resolved on the compose network.
+      # This overrides the SQLite default in .env.example - inside the stack,
+      # Postgres is the target.
+      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-retail}:${POSTGRES_PASSWORD:-retail}@db:5432/${POSTGRES_DB:-retail_insights}
+      ENVIRONMENT: ${ENVIRONMENT:-development}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      # The browser runs on the host, so the origin it sends is a localhost
+      # one - the frontend container's own name is never the Origin header.
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://localhost:5173}
+      CHURN_THRESHOLD_DAYS: ${CHURN_THRESHOLD_DAYS:-90}
+    ports:
+      - "8000:8000"
+    volumes:
+      # Shared with `seed`: the seed job writes the model artifact and the
+      # quality report, and the API reads them. Without this the API would
+      # serve 503 from the churn endpoints even after a successful seed,
+      # because each container has its own copy of the image filesystem.
+      - model_artifacts:/app/backend/app/ml/artifacts
+      - ./data:/app/data
+    depends_on:
+      db:
+        # Not just "started": the API's own retry/backoff would handle a slow
+        # Postgres, but waiting for the healthcheck keeps the startup logs
+        # clean and makes a genuine connection failure obvious.
+        condition: service_healthy
+
+  # -------------------------------------------------------------- frontend ---
+  web:
+    build:
+      context: frontend
+      dockerfile: Dockerfile
+      args:
+        # Baked into the bundle at build time. This is the URL the BROWSER
+        # uses, so it must be the host-published API port - "http://api:8000"
+        # would only resolve inside the compose network, not in the browser.
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8000/api}
+    container_name: retail-insights-web
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    depends_on:
+      - api
+
+  # ------------------------------------------------------------------ seed ---
+  seed:
+    # Reuses the api image rather than building a second one.
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: retail-insights-seed
+    profiles: ["tools"]  # excluded from a bare `docker compose up`
+    environment:
+      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-retail}:${POSTGRES_PASSWORD:-retail}@db:5432/${POSTGRES_DB:-retail_insights}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      CHURN_THRESHOLD_DAYS: ${CHURN_THRESHOLD_DAYS:-90}
+    volumes:
+      - model_artifacts:/app/backend/app/ml/artifacts
+      # Bind-mounted so the downloaded dataset is cached on the host and
+      # survives `docker compose down -v` - re-seeding does not re-download.
+      - ./data:/app/data
+    depends_on:
+      db:
+        condition: service_healthy
+    command: ["python", "scripts/seed_all.py"]
+
+volumes:
+  postgres_data:
+  model_artifacts:

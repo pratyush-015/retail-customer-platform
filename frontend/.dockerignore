@@ -1,0 +1,28 @@
+# Build context excludes for the FRONTEND image (context: frontend/).
+
+# Critically: node_modules. Copying host-built modules over the ones `npm ci`
+# installs in the container is the classic source of "works locally, breaks in
+# Docker" - native binaries compiled for Windows/macOS do not run on Alpine.
+node_modules
+
+# Build output - regenerated inside the image by `npm run build`.
+dist
+dist-ssr
+
+.env
+.env.*
+!.env.example
+
+# Local tooling caches and logs.
+.vite
+coverage
+*.log
+npm-debug.log*
+
+.git
+.gitignore
+.vscode
+.idea
+
+Dockerfile
+.dockerignore

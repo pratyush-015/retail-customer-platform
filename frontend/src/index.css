@@ -1,0 +1,91 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Exposed as CSS variables so Recharts (which needs real colour strings,
+       not class names) draws from the same palette as the Tailwind classes. */
+    --c-navy-900: #14202f;
+    --c-navy-700: #2a405c;
+    --c-navy-400: #5f83ab;
+    --c-navy-200: #b6c9dd;
+    --c-teal-500: #22a3a3;
+    --c-teal-300: #74d8d6;
+    --c-risk-high: #dc2626;
+    --c-risk-medium: #d97706;
+    --c-risk-low: #059669;
+    --c-grid: #e6ecf2;
+  }
+
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    @apply bg-surface-sunken text-navy-900 font-sans text-body;
+  }
+
+  /* Numeric columns line up only if digits are tabular. Without this, sorted
+     revenue tables visibly jitter between rows. */
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+
+  :focus-visible {
+    @apply outline-none ring-2 ring-teal-500 ring-offset-2 ring-offset-surface-sunken;
+  }
+}
+
+@layer components {
+  .card {
+    @apply rounded-card border border-navy-100 bg-surface p-card shadow-card;
+  }
+
+  /* Only interactive cards lift. A static KPI card that animates on hover
+     implies a click target that isn't there. */
+  .card-interactive {
+    @apply card transition-shadow duration-200 hover:shadow-card-hover;
+  }
+
+  .label-micro {
+    @apply text-micro font-semibold uppercase tracking-wider text-navy-400;
+  }
+
+  .skeleton {
+    @apply relative overflow-hidden rounded bg-navy-100/70;
+  }
+
+  /* The moving highlight that makes a skeleton read as "loading". */
+  .skeleton::after {
+    content: '';
+    @apply absolute inset-0 -translate-x-full animate-shimmer;
+    background-image: linear-gradient(
+      90deg,
+      rgba(255, 255, 255, 0) 0,
+      rgba(255, 255, 255, 0.55) 50%,
+      rgba(255, 255, 255, 0) 100%
+    );
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .skeleton::after {
+      @apply hidden;
+    }
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+
+  .th-sortable {
+    @apply cursor-pointer select-none transition-colors hover:text-navy-700;
+  }
+
+  .row-hover {
+    @apply transition-colors hover:bg-navy-50/70;
+  }
+}

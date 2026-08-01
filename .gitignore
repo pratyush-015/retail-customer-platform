@@ -32,9 +32,15 @@ coverage.xml
 # The raw dataset (~45 MB) is downloaded at setup time, never committed.
 data/raw/
 data/processed/
-data/*.db
-data/*.sqlite
-data/*.sqlite3
+
+# Local databases, wherever they land. Deliberately NOT scoped to data/: the
+# test suite and ad-hoc `alembic upgrade head` runs write SQLite files next to
+# whatever directory they were invoked from (backend/test_ci.db and the like),
+# and a stray warehouse is never something you want in a commit.
+*.db
+*.sqlite
+*.sqlite3
+
 
 # Generated audit artifact; a committed sample lives in data/sample/
 data/data_quality_report.json
