@@ -22,7 +22,9 @@
     // that explicitly instead of rendering "undefined" into a card.
     "noUncheckedIndexedAccess": true,
 
-    "baseUrl": ".",
+    // No `baseUrl` here: it is deprecated as of TS 6 and removed in TS 7.
+    // Since TS 4.4 `paths` works standalone, with relative entries resolved
+    // against this tsconfig's directory - which is exactly what we want.
     "paths": { "@/*": ["./src/*"] }
   },
   "include": ["src", "vite.config.ts"]

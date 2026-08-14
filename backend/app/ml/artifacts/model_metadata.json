@@ -1,7 +1,7 @@
 {
   "model_version": "1.1.0",
   "model_type": "LogisticRegression",
-  "trained_at": "2026-07-31T17:35:41.849189+00:00",
+  "trained_at": "2026-08-01T10:15:26.231878+00:00",
   "churn_definition": "A customer is churned if they made no purchase in the 90 days following the training cutoff (2011-09-10).",
   "leakage_prevention": "Features are computed exclusively from transactions before the cutoff date; the label is derived exclusively from transactions after it. Recency is therefore a valid predictor rather than a restatement of the target, which is why ROC-AUC is realistic instead of 1.00.",
   "features": [
