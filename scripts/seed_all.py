@@ -39,6 +39,8 @@ from pathlib import Path
 
 import _bootstrap  # noqa: F401  (path setup; must precede `app` imports)
 
+from alembic import command
+from alembic.config import Config
 from sqlalchemy.engine import make_url
 
 from app.core.config import get_settings
@@ -180,6 +182,11 @@ def main() -> int:
 
     timings: list[tuple[str, float]] = []
     overall_started = time.perf_counter()
+
+    if stages[0].key == "etl":
+        settings.ensure_directories()
+        alembic_ini = SCRIPTS_DIR.parent / "backend" / "alembic.ini"
+        command.upgrade(Config(str(alembic_ini)), "head")
 
     for index, stage in enumerate(stages, start=1):
         timings.append((stage.key, _run_stage(stage, index, len(stages))))

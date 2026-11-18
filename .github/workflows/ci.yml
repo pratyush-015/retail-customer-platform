@@ -70,18 +70,15 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r backend/requirements.txt
 
-      - name: Run pytest
-        # `working-directory: backend` matches how the suite is run locally;
-        # pytest's rootdir detection and the conftest path setup both depend
-        # on it.
+      - name: Migrate SQLite and run pytest
         working-directory: backend
         env:
           ENVIRONMENT: test
-          # In-memory-equivalent temp SQLite file: the tests build their own
-          # fixtures and must never touch a developer's seeded warehouse.
-          DATABASE_URL: sqlite:///./test_ci.db
+          DATABASE_URL: sqlite:///${{ runner.temp }}/retail-ci.db
           LOG_LEVEL: WARNING
-        run: python -m pytest -v --tb=short
+        run: |
+          alembic upgrade head
+          python -m pytest -v --tb=short
 
       - name: Apply Alembic migrations to Postgres
         # Proves the migration runs on the real target engine, not just SQLite -
@@ -137,8 +134,6 @@ jobs:
         run: npm run typecheck
 
       - name: Build
-        env:
-          VITE_API_BASE_URL: http://localhost:8000/api
         run: npm run build
 
       # Makes the built bundle downloadable from the run summary, which is
@@ -154,7 +149,7 @@ jobs:
   docker-images:
     name: Build Docker images
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     needs: [backend, frontend]
 
     steps:
@@ -179,6 +174,7 @@ jobs:
         with:
           context: .
           file: backend/Dockerfile
+          target: api
           push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
           tags: ghcr.io/${{ github.repository }}/api:latest
           # GitHub Actions cache: without it every run recompiles the scientific
@@ -194,9 +190,28 @@ jobs:
           push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
           tags: ghcr.io/${{ github.repository }}/web:latest
           build-args: |
-            VITE_API_BASE_URL=${{ vars.VITE_API_BASE_URL || 'http://localhost:8000/api' }}
+            VITE_API_URL=${{ vars.VITE_API_URL || 'http://localhost:8000' }}
           cache-from: type=gha,scope=web
           cache-to: type=gha,mode=max,scope=web
+
+      - name: Build the hosted dashboard image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: backend/Dockerfile
+          target: hosted
+          load: true
+          tags: retail-customer-platform:ci
+          cache-from: type=gha,scope=hosted
+          cache-to: type=gha,mode=max,scope=hosted
+
+      - name: Verify the hosted dashboard and seeded API
+        run: |
+          docker run -d --name retail-demo -p 127.0.0.1:8000:8000 retail-customer-platform:ci
+          trap 'docker logs retail-demo; docker rm -f retail-demo' EXIT
+          curl --fail --silent --show-error --retry 20 --retry-all-errors --retry-delay 2 http://127.0.0.1:8000/readyz
+          curl --fail --silent --show-error http://127.0.0.1:8000/segments | grep -q '<div id="root">'
+          docker exec retail-demo sh -c 'cd backend && python -m pytest -q --tb=short'
 
     # Scoped to this job only, and only needed for the GHCR push above.
     permissions:

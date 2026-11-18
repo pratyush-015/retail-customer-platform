@@ -109,8 +109,8 @@ def main() -> int:
     print("  SAVING ARTIFACTS")
     print(RULE)
     model_path, metadata_path = save_artifacts(result)
-    print(f"  ✓ {model_path.relative_to(model_path.parents[4])}")
-    print(f"  ✓ {metadata_path.relative_to(metadata_path.parents[4])}")
+    print(f"  ✓ {model_path}")
+    print(f"  ✓ {metadata_path}")
 
     print(f"\n{RULE}")
     print(f"  Training complete. ROC-AUC: {result.metrics['roc_auc']:.4f}")

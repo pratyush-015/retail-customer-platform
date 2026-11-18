@@ -44,6 +44,7 @@ services:
       # Repo root: the backend image needs scripts/ as well as backend/.
       context: .
       dockerfile: backend/Dockerfile
+      target: api
     container_name: retail-insights-api
     restart: unless-stopped
     environment:
@@ -82,7 +83,7 @@ services:
         # Baked into the bundle at build time. This is the URL the BROWSER
         # uses, so it must be the host-published API port - "http://api:8000"
         # would only resolve inside the compose network, not in the browser.
-        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8000/api}
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:8000}
     container_name: retail-insights-web
     restart: unless-stopped
     ports:
@@ -96,6 +97,7 @@ services:
     build:
       context: .
       dockerfile: backend/Dockerfile
+      target: api
     container_name: retail-insights-seed
     profiles: ["tools"]  # excluded from a bare `docker compose up`
     environment:

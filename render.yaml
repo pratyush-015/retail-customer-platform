@@ -1,65 +1,8 @@
-# =============================================================================
-# Render blueprint: FastAPI backend + managed Postgres.
-#
-# Render reads this on "New > Blueprint" and provisions both services, wiring
-# the database credentials into the API automatically. Railway users can mirror
-# the same two services by hand - see README > Deployment.
-#
-# The frontend is NOT here: it is a static SPA and belongs on Vercel (vercel.json).
-# =============================================================================
-
-databases:
-  - name: retail-insights-db
-    databaseName: retail_insights
-    user: retail
-    # Free tier is enough for this dataset (~800k fact rows fits comfortably).
-    plan: free
-
 services:
   - type: web
-    name: retail-insights-api
+    name: retail-customer-platform
     runtime: docker
     plan: free
     dockerfilePath: ./backend/Dockerfile
-    # Repo root, because the backend image copies both backend/ and scripts/.
     dockerContext: .
-    healthCheckPath: /api/health
-
-    envVars:
-      # fromDatabase pulls the real connection string from the managed instance
-      # above, so the credential is never written down in this file.
-      #
-      # NOTE: Render exposes a `postgres://` URL. SQLAlchemy 2.x needs an
-      # explicit driver, so the app normalises this prefix to
-      # `postgresql+psycopg2://` at startup (see app/core/config.py).
-      - key: DATABASE_URL
-        fromDatabase:
-          name: retail-insights-db
-          property: connectionString
-
-      - key: ENVIRONMENT
-        value: production
-      - key: LOG_LEVEL
-        value: INFO
-
-      # Must be the deployed Vercel origin, or the browser blocks every request
-      # with a CORS error while the API itself looks perfectly healthy.
-      # sync: false = Render prompts for the value instead of committing it.
-      - key: CORS_ORIGINS
-        sync: false
-
-      - key: CHURN_THRESHOLD_DAYS
-        value: 90
-      - key: RANDOM_SEED
-        value: 42
-
-    # Deliberately NOT a release/predeploy hook: the seed runs the full ETL and
-    # model training (~5-10 min, several hundred MB of pandas), which would time
-    # out a free-tier deploy and re-run on every push. Seed once, manually:
-    #
-    #   render shell retail-insights-api
-    #   alembic upgrade head -c backend/alembic.ini
-    #   python scripts/seed_all.py
-    #
-    # Migrations alone are cheap and safe to automate if you prefer:
-    #   preDeployCommand: cd backend && alembic upgrade head
+    healthCheckPath: /readyz

@@ -32,8 +32,8 @@ COPY . .
 #
 # Nothing secret goes here: anything inlined into a bundle is readable by
 # anyone who loads the page. Only the public API base URL belongs in this arg.
-ARG VITE_API_BASE_URL=http://localhost:8000/api
-ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
+ARG VITE_API_URL=http://localhost:8000
+ENV VITE_API_URL=$VITE_API_URL
 
 # Runs tsc --noEmit then vite build (see package.json), so a type error fails
 # the image build instead of shipping a broken bundle.

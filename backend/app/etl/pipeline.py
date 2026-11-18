@@ -131,7 +131,7 @@ def run_etl(
         Base.metadata.create_all(engine)
 
     with session_scope() as session:
-        load_star_schema(frames, engine, session, replace=replace)
+        load_star_schema(frames, session, replace=replace)
 
     with session_scope() as session:
         counts = verify_load(session)

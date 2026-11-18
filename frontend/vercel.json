@@ -7,22 +7,19 @@
 
   "rewrites": [
     {
-      "comment": "SPA history fallback. React Router owns /segments, /customers/:id and friends; without this a hard refresh on a deep link returns Vercel's 404 because no such file exists in dist/.",
-      "source": "/((?!assets/).*)",
+      "source": "/(.*)",
       "destination": "/index.html"
     }
   ],
 
   "headers": [
     {
-      "comment": "Vite emits content-hashed asset filenames, so a given URL's bytes never change - cache them for a year and skip revalidation.",
       "source": "/assets/(.*)",
       "headers": [
         { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
       ]
     },
     {
-      "comment": "Baseline hardening. No CSP here: it would need to enumerate the API origin, which differs per deployment, and a wrong CSP silently breaks every chart.",
       "source": "/(.*)",
       "headers": [
         { "key": "X-Content-Type-Options", "value": "nosniff" },

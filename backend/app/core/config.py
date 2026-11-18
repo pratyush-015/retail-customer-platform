@@ -44,6 +44,7 @@ class Settings(BaseSettings):
     environment: str = "development"
     log_level: str = "INFO"
     api_v1_prefix: str = "/api"
+    frontend_dist: Path | None = None
 
     # SQLite default keeps the project runnable with zero infrastructure.
     # docker-compose and the deployment configs override this with Postgres.
@@ -152,6 +153,8 @@ class Settings(BaseSettings):
         """
         url = self.database_url
         prefix = "sqlite:///"
+        if url.startswith("postgres://"):
+            return url.replace("postgres://", "postgresql+psycopg2://", 1)
         if url.startswith(prefix):
             raw = url[len(prefix) :]
             if raw and not raw.startswith("/") and ":" not in raw[:3]:
