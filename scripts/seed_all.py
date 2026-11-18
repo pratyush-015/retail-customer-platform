@@ -184,6 +184,7 @@ def main() -> int:
     overall_started = time.perf_counter()
 
     if stages[0].key == "etl":
+        settings.ensure_directories()
         alembic_ini = SCRIPTS_DIR.parent / "backend" / "alembic.ini"
         command.upgrade(Config(str(alembic_ini)), "head")
 

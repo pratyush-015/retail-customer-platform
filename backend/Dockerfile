@@ -104,4 +104,4 @@ COPY --from=seed-demo --chown=appuser:appuser /app/data/retail_insights.db /app/
 COPY --from=seed-demo --chown=appuser:appuser /app/backend/app/ml/artifacts/ /app/backend/app/ml/artifacts/
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
     CMD curl --fail "http://127.0.0.1:${PORT:-8000}/readyz" || exit 1
-CMD ["sh", "-c", "exec uvicorn app.main:app --host 0.0.0.0 --port "${PORT:-8000}" --app-dir backend"]
+CMD ["sh", "scripts/start_hosted.sh"]
