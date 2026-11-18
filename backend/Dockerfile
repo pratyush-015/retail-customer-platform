@@ -33,7 +33,7 @@ RUN pip install --no-cache-dir --upgrade pip \
     && pip wheel --no-cache-dir --wheel-dir /wheels -r requirements.txt
 
 # ------------------------------------------------------------------ runtime --
-FROM python:3.12-slim AS runtime
+FROM python:3.12-slim AS api
 
 # PYTHONDONTWRITEBYTECODE : no .pyc litter in a layer that is never reused
 # PYTHONUNBUFFERED        : logs reach `docker logs` immediately, not on flush
@@ -82,3 +82,25 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
 # Exec form: uvicorn becomes PID 1 and receives SIGTERM directly, so
 # `docker stop` shuts down gracefully instead of waiting out the 10s timeout.
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--app-dir", "backend"]
+
+# Build-time seeding keeps the hosted demo functional across free-tier
+# restarts. Only the finished warehouse, audit and model go into the image.
+FROM api AS seed-demo
+RUN python scripts/seed_all.py
+
+FROM node:20-alpine AS dashboard
+WORKDIR /web
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci --no-audit --no-fund
+COPY frontend/ ./
+RUN npm run build
+
+FROM api AS hosted
+ENV ENVIRONMENT=production \
+    FRONTEND_DIST=/app/frontend/dist
+COPY --from=dashboard /web/dist /app/frontend/dist
+COPY --from=seed-demo --chown=appuser:appuser /app/data/retail_insights.db /app/data/data_quality_report.json /app/data/
+COPY --from=seed-demo --chown=appuser:appuser /app/backend/app/ml/artifacts/ /app/backend/app/ml/artifacts/
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+    CMD curl --fail "http://127.0.0.1:${PORT:-8000}/readyz" || exit 1
+CMD ["sh", "-c", "exec uvicorn app.main:app --host 0.0.0.0 --port "${PORT:-8000}" --app-dir backend"]

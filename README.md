@@ -8,7 +8,7 @@ platform loads the raw spreadsheets into a star-schema warehouse, scores every
 customer with RFM segmentation and a leakage-free logistic-regression churn model,
 and serves the results through a FastAPI backend to a React dashboard.
 
-**Live demo:** _not currently hosted — see [Deployment](#deployment) to stand up your own in ~10 minutes._
+**Web demo:** [Deploy the full platform](#deployment).
 
 ---
 
@@ -129,7 +129,7 @@ produce identical results — CI runs the test suite against each.
 ### Docker (recommended)
 
 ```bash
-git clone <your-fork-url> retail-insights-platform
+git clone https://github.com/pratyush-015/retail-customer-platform.git retail-insights-platform
 cd retail-insights-platform
 cp .env.example .env          # defaults work as-is
 
@@ -336,45 +336,53 @@ real Postgres instance, then lints, typechecks and builds the frontend.
 
 ## Deployment
 
-### Backend + database — Render
+### One URL for the full demo on Render
 
-`render.yaml` is a blueprint: **New → Blueprint** against your fork provisions both the
-web service and a managed Postgres, wiring `DATABASE_URL` automatically.
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/pratyush-015/retail-customer-platform)
 
-Set one variable by hand:
+1. In the [Render dashboard](https://dashboard.render.com/), choose **New → Blueprint**
+   and connect this repository, or use the button above. Choose the branch with the
+   deployment changes. Apply the Blueprint and wait for the service to report **Live**.
+2. Open the service's `https://<service>.onrender.com` URL. Open `/readyz` and confirm
+   it reports `status: ok` for the warehouse and the churn model. Open `/docs` for
+   Swagger. Test Overview, Segments, Churn, Customers, and Insights.
+3. Copy the service URL into your README or interview notes. The free service sleeps
+   between visits. Open it before presenting so it has time to wake up.
 
-| Variable | Value |
-|---|---|
-| `CORS_ORIGINS` | Your Vercel URL, e.g. `https://retail-insights.vercel.app` |
+The image runs the full UCI pipeline during its build. The React dashboard, FastAPI,
+SQLite star schema and fitted churn model ship together, so no separate database,
+shell, or frontend configuration is required for the hosted demo. The web dashboard
+is the React implementation. A Power BI report is not included in this repository.
 
-Then seed once from the Render shell (deliberately *not* a deploy hook — the pipeline
-takes ~10 minutes and would time out the build, then re-run on every push):
+To run exactly this image on your laptop:
 
 ```bash
-cd backend && alembic upgrade head
-cd .. && python scripts/seed_all.py
+docker build -f backend/Dockerfile -t retail-customer-platform .
+docker run --rm -p 8000:8000 retail-customer-platform
 ```
 
-**Railway** works the same way: add a Postgres plugin, point a service at
-`backend/Dockerfile` with the repo root as build context, set `DATABASE_URL` and
-`CORS_ORIGINS`, run the same two commands in the shell.
+Then open `http://localhost:8000`. To demonstrate **PostgreSQL**, use the seeded
+Docker Compose setup in [Quick start](#quick-start).
 
-### Frontend — Vercel
+### Optional split deployment
 
-Import the repo, set **Root Directory** to `frontend`. `vercel.json` supplies the build
-config, SPA history fallback, and cache headers.
+For a hosted PostgreSQL deployment, use a PostgreSQL service and seed it from a
+Python environment with access to its connection URL. Set `DATABASE_URL` to that URL
+in the seed environment and API service. From the repository root, run:
 
-| Variable | Value |
-|---|---|
-| `VITE_API_BASE_URL` | `https://<your-api>.onrender.com/api` |
+```bash
+python scripts/seed_all.py
+```
 
-Vite inlines env vars at **build** time, so changing this requires a redeploy, not just a
-restart. If charts render empty with CORS errors in the console, `CORS_ORIGINS` on the
-backend doesn't match the Vercel origin exactly — scheme and subdomain included.
+Keep the generated model and its metadata available to the API across restarts.
+The hosted Docker image already includes a fitted model from the same UCI dataset
+and default model settings. If you change the training settings, use the artifacts
+from your seed run. Confirm `/readyz` returns HTTP 200 before sharing the dashboard.
 
-> On Render's free tier the API sleeps after inactivity; the first request takes ~30s.
-> The dashboard's loading skeletons cover this, but it's worth knowing before you assume
-> something is broken.
+For a separate Vercel frontend, import the repository and set **Root Directory**
+to `frontend`. Set `VITE_API_URL` to your deployed API **origin** (for example
+`https://retail-insights-api.onrender.com`) and redeploy. Add the Vercel origin
+to `CORS_ORIGINS` on the API service.
 
 ---
 

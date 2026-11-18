@@ -17,9 +17,12 @@ import logging
 from contextlib import asynccontextmanager
 from typing import AsyncIterator
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 
+from app.api.health import health
 from app.api.router import api_router
 from app.core.config import get_settings
 from app.core.database import reset_engine, wait_for_database
@@ -27,6 +30,7 @@ from app.core.error_handlers import register_exception_handlers
 from app.core.exceptions import DatabaseConnectionError
 from app.core.logging_config import configure_logging
 from app.ml import registry
+from app.schemas.common import HealthResponse
 
 logger = logging.getLogger(__name__)
 
@@ -129,6 +133,29 @@ def create_app() -> FastAPI:
 
     register_exception_handlers(app)
     app.include_router(api_router, prefix=settings.api_v1_prefix)
+
+    @app.get("/readyz", include_in_schema=False)
+    def readiness(result: HealthResponse = Depends(health)) -> JSONResponse:
+        return JSONResponse(
+            content=result.model_dump(mode="json"),
+            status_code=200 if result.status == "ok" else 503,
+        )
+
+    if settings.frontend_dist is not None:
+        dist = settings.frontend_dist
+        index = dist / "index.html"
+        if not index.is_file():
+            raise RuntimeError(f"Dashboard build is missing: {index}")
+        app.mount("/assets", StaticFiles(directory=dist / "assets"), name="assets")
+
+        @app.get("/{route:path}", include_in_schema=False)
+        def dashboard(route: str) -> FileResponse:
+            api_prefix = settings.api_v1_prefix.strip("/")
+            if route == api_prefix or route.startswith(f"{api_prefix}/"):
+                raise HTTPException(status_code=404, detail="Not Found")
+            return FileResponse(index, media_type="text/html", headers={"Cache-Control": "no-cache"})
+
+        return app
 
     @app.get("/", include_in_schema=False)
     def root() -> dict[str, str]:
