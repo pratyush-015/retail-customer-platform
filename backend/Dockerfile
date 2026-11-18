@@ -97,6 +97,7 @@ RUN npm run build
 
 FROM api AS hosted
 ENV ENVIRONMENT=production \
+    OPENBLAS_NUM_THREADS=1 \
     FRONTEND_DIST=/app/frontend/dist
 COPY --from=dashboard /web/dist /app/frontend/dist
 COPY --from=seed-demo --chown=appuser:appuser /app/data/retail_insights.db /app/data/data_quality_report.json /app/data/

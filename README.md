@@ -49,7 +49,7 @@ flowchart LR
         B[download & cache]
         C["clean<br/>11 audited rules"]
         D["transform<br/>to star schema"]
-        E["load<br/>idempotent upsert"]
+        E["load<br/>idempotent refresh"]
         B --> C --> D --> E
         C -.->|every decision| Q[(data_quality_report.json)]
     end
@@ -162,7 +162,7 @@ cd frontend && npm install && npm run dev        # terminal 2 → :5173
 Each stage is independently runnable and re-runnable — useful when iterating.
 
 ```bash
-python scripts/run_etl.py              # download → clean → load     (--force to reload)
+python scripts/run_etl.py              # download → clean → load     (full refresh)
 python scripts/run_rfm.py              # RFM scoring                 (--dry-run to preview)
 python scripts/train_churn_model.py    # train + write artifacts
 python scripts/score_customers.py      # write churn_risk_score
@@ -177,17 +177,16 @@ python scripts/verify_warehouse.py     # 10 integrity assertions
 Numbers below are the live output of `verify_warehouse.py`, `run_rfm.py` and
 `run_stats.py` against the full dataset — not illustrative placeholders.
 
-**1. Revenue is extraordinarily concentrated.** Champions are 25.1% of customers but
-**71.4% of net revenue** (£11.63M of £19.01M). Add Loyal Customers and just under half
-the base accounts for 86% of revenue. The practical read: retention spend on the top
-two segments has far more leverage than acquisition, and losing a single Champion costs
-roughly what acquiring 30 one-off buyers earns back.
+**1. Revenue is concentrated among Champions.** Champions are 25.1% of segmented
+customers and account for **£11.63M of £16.29M** in customer-attributed net revenue
+(71.4%). Total warehouse net revenue is **£19.01M**, including guest transactions.
+Champions and Loyal Customers together account for 86% of attributed revenue.
+This makes those segments a priority for retention analysis.
 
 **2. £1.64M of historical revenue sits in lapsing segments.** 1,657 customers (27.9%)
-fall into About To Sleep / At Risk / Cannot Lose Them / Hibernating. The *Cannot Lose
-Them* group is the sharpest target — only 112 customers, but they averaged 8.0 orders
-each before going quiet for ~491 days. High past value plus long silence is exactly the
-profile where a win-back campaign pays for itself.
+fall into About To Sleep, At Risk, Cannot Lose Them, or Hibernating. The 112 customers
+in Cannot Lose Them averaged 8.0 orders and 491 days of inactivity as of the dataset's
+reference date.
 
 **3. Churn is predictable from behavioural rhythm, not raw spend.** The model reaches
 **ROC-AUC 0.807** (5-fold CV 0.800 ± 0.014) on a 56.6% base rate. The dominant features
@@ -221,7 +220,8 @@ Interactive OpenAPI docs are auto-generated at **`/docs`** (Swagger UI) and **`/
 | GET | `/api/customers/{customer_id}` | Profile, RFM, churn score, order history |
 | GET | `/api/churn/at-risk?threshold=0.5` | At-risk customers + revenue at stake |
 | GET | `/api/churn/model-performance` | Confusion matrix, ROC curve, feature importance |
-| GET | `/api/stats/hypothesis-test?type=ttest\|anova\|chi2` | Run a test, get plain-language reading |
+| GET | `/api/stats/hypothesis-test` | Run a t-test, country or segment ANOVA, or country or segment chi-square test |
+| GET | `/api/stats/insights` | Fetch the dashboard’s five hypothesis tests in one request |
 | POST | `/api/predict/churn` | Score arbitrary RFM values ad hoc |
 
 ### Error contract
@@ -242,7 +242,7 @@ Validation failures add a `details` array naming each offending field:
 Domain exceptions (`CustomerNotFoundError`, `InvalidDateRangeError`,
 `ModelNotLoadedError`, `DatabaseConnectionError`) each map to a specific status. Notably,
 **a missing or corrupt model file yields 503 with an actionable message on the two
-endpoints that need it — the other eight keep serving.** The registry validates the
+endpoints that need the fitted model. Other endpoints can still serve warehouse data.** The registry validates the
 artifact on load (`predict_proba` present, feature names matching metadata), so a
 truncated `.joblib` is caught at startup rather than mid-request.
 
@@ -258,21 +258,17 @@ From the full run: **1,067,371 raw rows → 1,033,027 loaded** (96.8% retained).
 
 | Rule | Rows | Decision |
 |---|---|---|
-| Exact duplicate lines | 34,335 | Dropped — same invoice/product/timestamp, an export artifact |
-| Missing `CustomerID` | 243,007 | **Kept**, assigned to a sentinel. Real revenue; excluded from customer-level analytics only |
-| Cancellations (`C`-prefixed) | 19,494 | **Kept**, flagged `is_cancelled`. Returns are signal, not noise |
-| Non-product stock codes | 2,595 | Dropped — POSTAGE, BANK CHARGES, TEST, etc. are not merchandise |
-| Zero/negative unit price | 6,202 | Dropped — adjustments with no economic meaning |
+| Exact duplicate lines | 34,337 | Dropped. Duplicate invoice, product, quantity, price and timestamp |
+| Missing `CustomerID` after preceding rules | 235,146 | Kept with a null customer ID for sales totals and excluded from customer analytics |
+| Cancellations (`C`-prefixed) | 19,494 | Kept and flagged as `is_cancelled` |
+| Service stock codes | 5,716 | Kept and flagged for product analysis |
+| Zero unit price | 6,202 | Kept and flagged. These lines contribute zero revenue |
+| Negative unit price | 5 | Dropped |
 
-The two judgement calls worth flagging: dropping the 22.8% of rows without a customer ID
-would understate total revenue by roughly a fifth, so they are retained for revenue
-reporting and excluded from RFM. And cancellations are *netted* rather than removed — a
-customer who returns everything is a materially different customer from one who never
-bought, and the churn model's `return_rate` feature depends on that distinction.
-
-Loading is idempotent via natural-key upsert: running the ETL twice yields identical row
-counts, which `verify_warehouse.py` asserts along with referential integrity, revenue
-arithmetic (`revenue == quantity * unit_price`), and calendar completeness.
+Cancellations are included in net sales and tracked in the churn model's
+`return_rate` feature. The default ETL replaces the warehouse in one transaction.
+Re-running the same source repeats the same refresh. `verify_warehouse.py` checks
+row counts, referential integrity, revenue arithmetic and calendar completeness.
 
 ---
 

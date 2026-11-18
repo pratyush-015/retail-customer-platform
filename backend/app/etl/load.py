@@ -13,16 +13,15 @@ that:
 2. **The ``uq_fact_sales_line`` unique constraint** guarantees that even an
    append-mode load cannot create duplicate invoice lines.
 
-Bulk inserts go through pandas' ``to_sql`` with ``method="multi"`` and explicit
-chunking - loading ~1 M rows one ORM object at a time would take minutes and
-exhaust memory, while multi-row INSERTs land in a few seconds.
+Bulk inserts use pandas ``to_sql`` with explicit chunking, on the same
+connection as the deletes.
 """
 
 from __future__ import annotations
 
 import pandas as pd
 from sqlalchemy import delete, func, select
-from sqlalchemy.engine import Engine
+from sqlalchemy.engine import Connection, Engine
 from sqlalchemy.orm import Session
 
 from app.core.logging_config import get_logger
@@ -91,20 +90,23 @@ def chunk_size_for(engine: Engine, n_columns: int) -> int:
     return max(1, min(MAX_ROWS_PER_CHUNK, cap // max(1, n_columns)))
 
 
-def _bulk_insert(engine: Engine, table: str, frame: pd.DataFrame) -> int:
-    """Insert a frame with chunked multi-row INSERTs."""
+def _bulk_insert(connection: Connection, table: str, frame: pd.DataFrame) -> int:
+    """Insert a frame in batches within the warehouse transaction."""
     if frame.empty:
         logger.warning("  %s: nothing to insert (empty frame)", table)
         return 0
 
-    chunk = chunk_size_for(engine, len(frame.columns))
+    uses_sqlite = connection.dialect.name == "sqlite"
+    # SQLite executemany binds a single row per execution, so the chunk
+    # limits Python memory without increasing the bound parameters per SQL statement.
+    chunk = MAX_ROWS_PER_CHUNK if uses_sqlite else chunk_size_for(connection.engine, len(frame.columns))
     frame.to_sql(
         table,
-        engine,
+        connection,
         if_exists="append",
         index=False,
         chunksize=chunk,
-        method="multi",
+        method=None if uses_sqlite else "multi",
     )
 
     logger.info("  Loaded  %-14s %s rows", table, f"{len(frame):,}")
@@ -113,7 +115,6 @@ def _bulk_insert(engine: Engine, table: str, frame: pd.DataFrame) -> int:
 
 def load_star_schema(
     frames: dict[str, pd.DataFrame],
-    engine: Engine,
     session: Session,
     *,
     replace: bool = True,
@@ -133,20 +134,17 @@ def load_star_schema(
     if replace:
         logger.info("Clearing existing warehouse data (full refresh)...")
         truncate_warehouse(session)
-        # Flush the deletes so the inserts below see an empty warehouse and
-        # cannot trip the unique constraint against soon-to-be-deleted rows.
-        session.flush()
-        session.commit()
 
     logger.info("Loading star schema into the database...")
     counts: dict[str, int] = {}
+    connection = session.connection()
     for table in LOAD_ORDER:
         frame = frames.get(table)
         if frame is None:
             logger.warning("  %s: no frame supplied, skipping", table)
             counts[table] = 0
             continue
-        counts[table] = _bulk_insert(engine, table, _prepare(table, frame))
+        counts[table] = _bulk_insert(connection, table, _prepare(table, frame))
 
     return counts
 
